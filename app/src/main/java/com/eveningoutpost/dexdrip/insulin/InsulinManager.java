@@ -9,7 +9,10 @@ import com.eveningoutpost.dexdrip.utilitymodels.Pref;
 import com.eveningoutpost.dexdrip.xdrip;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import com.google.gson.annotations.Expose;
 
 import java.io.ByteArrayOutputStream;
@@ -19,6 +22,7 @@ import java.util.ArrayList;
 
 public class InsulinManager {
     private static final String TAG = "InsulinManager";
+    public static final String CUSTOM_PROFILES_PREF = "custom_insulin_profiles_json";
     private static ArrayList<Insulin> profiles;
     private static volatile Insulin basalProfile, bolusProfile;
 
@@ -36,16 +40,8 @@ public class InsulinManager {
                 return null;
             ArrayList<Insulin> ret = new ArrayList<Insulin>();
             for (insulinData d : profiles) {
-                Insulin insulin;
-                switch (d.Curve.type.toLowerCase()) {
-                    case "linear trapezoid":
-                        insulin = new LinearTrapezoidInsulin(d.name, d.displayName, d.PPN, d.concentration, d.Curve.data);
-                        Log.d(TAG, "initialized linear trapezoid insulin " + d.displayName);
-                        break;
-                    default:
-                        Log.d(TAG, "UNKNOWN Curve-Type " + d.Curve.type);
-                        return null;
-                }
+                final Insulin insulin = createInsulin(d);
+                if (insulin == null) return null;
                 ret.add(insulin);
             }
             return ret;
@@ -87,6 +83,160 @@ public class InsulinManager {
         public insulinCurve Curve;
     }
 
+    // shared factory converting json profile data to an Insulin instance
+    private static Insulin createInsulin(insulinData d) {
+        switch (d.Curve.type.toLowerCase()) {
+            case "linear trapezoid":
+                final Insulin insulin = new LinearTrapezoidInsulin(d.name, d.displayName, d.PPN, d.concentration, d.Curve.data);
+                Log.d(TAG, "initialized linear trapezoid insulin " + d.displayName);
+                return insulin;
+            default:
+                Log.d(TAG, "UNKNOWN Curve-Type " + d.Curve.type);
+                return null;
+        }
+    }
+
+    // public read-only access to the raw custom profile json (used by the profile add/edit form)
+    public static JsonArray getCustomProfilesJsonPublic() {
+        return getCustomProfilesJson();
+    }
+
+    // get the raw json array of user-created custom profiles stored in preferences
+    private static JsonArray getCustomProfilesJson() {
+        try {
+            final JsonElement element = new JsonParser().parse(Pref.getString(CUSTOM_PROFILES_PREF, "[]"));
+            if (element != null && element.isJsonArray()) return element.getAsJsonArray();
+        } catch (Exception e) {
+            Log.e(TAG, "Could not parse custom insulin profiles: " + e);
+        }
+        return new JsonArray();
+    }
+
+    // append user-created custom profiles (from prefs) to the supplied list of predefined profiles
+    private static void loadCustomProfiles(ArrayList<Insulin> list) {
+        try {
+            final JsonArray array = getCustomProfilesJson();
+            final Gson gson = new Gson();
+            for (JsonElement element : array) {
+                final insulinData d = gson.fromJson(element, insulinData.class);
+                if (d == null || d.Curve == null || d.Curve.type == null) continue;
+                final Insulin insulin = createInsulin(d);
+                if (insulin != null) list.add(insulin);
+            }
+            if (array.size() > 0)
+                Log.d(TAG, "Loaded " + array.size() + " custom insulin profiles from prefs");
+        } catch (Exception e) {
+            Log.e(TAG, "Got exception loading custom insulin profiles: " + e);
+        }
+    }
+
+    // add or update a user-defined profile, returns error message or null on success
+    public static String saveCustomProfile(String name, String displayName, String concentration,
+                                           String ppnCsv, String onset, String peak, String duration) {
+        try {
+            name = name == null ? "" : name.trim();
+            displayName = displayName == null || displayName.trim().isEmpty() ? name : displayName.trim();
+            concentration = concentration == null || concentration.trim().isEmpty() ? "U100" : concentration.trim();
+            if (name.isEmpty())
+                return "Please enter a profile name";
+            if (getProfile(name) != null)
+                return "A profile with this name already exists";
+            final long onsetV = Long.parseLong(onset.trim());
+            final long durationV = Long.parseLong(duration.trim());
+            if (onsetV < 0 || durationV <= 0)
+                return "Onset must be >= 0 and duration > 0 (minutes)";
+            long t1, t2;
+            final String peakStr = peak.trim();
+            if (peakStr.contains("-")) {
+                t1 = Long.parseLong(peakStr.split("-")[0].trim());
+                t2 = Long.parseLong(peakStr.split("-")[1].trim());
+            } else {
+                t1 = t2 = Long.parseLong(peakStr);
+            }
+            if (t1 < onsetV || t2 < t1 || t2 > durationV)
+                return "Peak must be between onset and duration";
+
+            final JsonObject curve = new JsonObject();
+            curve.addProperty("type", "linear trapezoid");
+            final JsonObject data = new JsonObject();
+            data.addProperty("onset", String.valueOf(onsetV));
+            data.addProperty("peak", peakStr);
+            data.addProperty("duration", String.valueOf(durationV));
+            curve.add("data", data);
+
+            final JsonObject obj = new JsonObject();
+            obj.addProperty("name", name);
+            obj.addProperty("displayName", displayName);
+            obj.addProperty("concentration", concentration);
+            final JsonArray ppnArray = new JsonArray();
+            if (ppnCsv != null)
+                for (String ppn : ppnCsv.split("[,;]")) {
+                    final String trimmed = ppn.trim();
+                    if (!trimmed.isEmpty()) ppnArray.add(trimmed);
+                }
+            if (ppnArray.size() == 0) ppnArray.add(name + "-" + concentration);
+            obj.add("PPN", ppnArray);
+            obj.add("Curve", curve);
+
+            final JsonArray array = getCustomProfilesJson();
+            // replace existing custom profile with the same name
+            final JsonArray filtered = new JsonArray();
+            for (JsonElement element : array) {
+                final JsonObject existing = element.getAsJsonObject();
+                if (!name.equalsIgnoreCase(existing.has("name") ? existing.get("name").getAsString() : ""))
+                    filtered.add(existing);
+            }
+            filtered.add(obj);
+            Pref.setString(CUSTOM_PROFILES_PREF, filtered.toString());
+            Log.d(TAG, "Saved custom insulin profile: " + name);
+            profiles = null; // force reload on next access
+            return null;
+        } catch (NumberFormatException e) {
+            return "Onset, peak and duration must be numbers (minutes)";
+        } catch (Exception e) {
+            Log.e(TAG, "Error saving custom insulin profile: " + e);
+            return "Error saving profile: " + e.toString();
+        }
+    }
+
+    // delete a user-defined custom profile by name, returns true if something was deleted
+    public static boolean deleteCustomProfile(String name) {
+        try {
+            final JsonArray array = getCustomProfilesJson();
+            final JsonArray filtered = new JsonArray();
+            boolean found = false;
+            for (JsonElement element : array) {
+                final JsonObject existing = element.getAsJsonObject();
+                final String existingName = existing.has("name") ? existing.get("name").getAsString() : "";
+                if (name.equalsIgnoreCase(existingName)) {
+                    found = true;
+                } else {
+                    filtered.add(existing);
+                }
+            }
+            if (found) {
+                Pref.setString(CUSTOM_PROFILES_PREF, filtered.toString());
+                Log.d(TAG, "Deleted custom insulin profile: " + name);
+                profiles = null; // force reload on next access
+            }
+            return found;
+        } catch (Exception e) {
+            Log.e(TAG, "Error deleting custom insulin profile: " + e);
+            return false;
+        }
+    }
+
+    // is this profile user-defined (custom) rather than predefined?
+    public static boolean isCustomProfile(String name) {
+        if (name == null) return false;
+        for (JsonElement element : getCustomProfilesJson()) {
+            final JsonObject existing = element.getAsJsonObject();
+            if (existing.has("name") && name.equalsIgnoreCase(existing.get("name").getAsString()))
+                return true;
+        }
+        return false;
+    }
+
     private static String readTextFile(InputStream inputStream) {
         ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
         if (inputStream != null) {
@@ -114,6 +264,8 @@ public class InsulinManager {
             Gson gson = new Gson();
             iDW = gson.fromJson(input, insulinDataWrapper.class);
             profiles = iDW.getInsulinProfiles();
+            if (profiles == null) profiles = new ArrayList<Insulin>();
+            loadCustomProfiles(profiles);
             Log.d(TAG, "Loaded Insulin Profiles: " + Integer.toString(profiles.size()));
             LoadDisabledProfilesFromPrefs();
             Log.d(TAG, "InsulinManager initialized from config file and Prefs");

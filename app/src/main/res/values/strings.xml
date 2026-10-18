@@ -2148,4 +2148,22 @@
     <string name="click">Click</string>
     <string name="to_use_this_instead">to use this instead?</string>
     <string name="the_transmitter_id_you_have_entered_is_incorrect">The transmitter ID or pairing code you have entered is incorrect and would not work.\n\nPlease double-check the details and try again.</string>
+
+    <string name="title_insulin_profile_add">Add Insulin Profile</string>
+    <string name="title_insulin_profile_edit">Edit Insulin Profile</string>
+    <string name="insulin_profile_add_header">Create a custom insulin profile. Curve values are in minutes (linear trapezoid model). The profile will be added to the predefined profiles.</string>
+    <string name="insulin_profile_name">Name</string>
+    <string name="insulin_profile_name_hint">e.g. MyInsulin</string>
+    <string name="insulin_profile_display_name">Display name (optional)</string>
+    <string name="insulin_profile_display_name_hint">e.g. MyInsulin (rapid acting)</string>
+    <string name="insulin_profile_concentration">Concentration</string>
+    <string name="insulin_profile_ppn">Pharmacy product numbers (PPN, comma separated, optional)</string>
+    <string name="insulin_profile_ppn_hint">e.g. 1234567, MyInsulin-U100</string>
+    <string name="insulin_profile_onset">Onset (minutes until activity starts)</string>
+    <string name="insulin_profile_peak">Peak (minutes, e.g. 90 or range 60-180)</string>
+    <string name="insulin_profile_duration">Duration (total minutes of activity)</string>
+    <string name="insulin_profile_saved">Insulin profile saved</string>
+    <string name="insulin_profile_deleted">Insulin profile deleted</string>
+    <string name="edit">Edit</string>
+    <string name="insulin_profile_add_new">Add new profile</string>
 </resources>

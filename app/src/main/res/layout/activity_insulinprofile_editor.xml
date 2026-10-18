@@ -61,6 +61,15 @@
                 android:layout_height="wrap_content"
                 android:prompt="@string/pref_select_basal_insulinprofiles" />
 
+            <Button
+                android:id="@+id/profileAddBtn"
+                style="?android:attr/buttonStyleSmall"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center_horizontal"
+                android:onClick="profileAddButton"
+                android:text="@string/insulin_profile_add_new" />
+
             <TextView
                 android:id="@+id/Text3"
                 android:layout_width="match_parent"

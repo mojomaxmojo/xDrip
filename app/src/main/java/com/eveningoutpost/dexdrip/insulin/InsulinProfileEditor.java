@@ -83,6 +83,16 @@ public class InsulinProfileEditor extends BaseAppCompatActivity {
                         cb.setChecked(false);
                 }
             });
+            // long-press on a custom (user-defined) profile offers editing or deletion
+            if (InsulinManager.isCustomProfile(i.getName())) {
+                cb.setOnLongClickListener(new View.OnLongClickListener() {
+                    @Override
+                    public boolean onLongClick(View v) {
+                        showCustomProfileOptions(i);
+                        return true;
+                    }
+                });
+            }
             v.addView(cb);
             linearLayout.addView(v);
             profiles.put(i.getDisplayName(), i);
@@ -132,6 +142,31 @@ public class InsulinProfileEditor extends BaseAppCompatActivity {
     public void profileCancelButton(View myview) {
         InsulinManager.LoadDisabledProfilesFromPrefs();
         finish();
+    }
+
+    public void profileAddButton(View myview) {
+        startActivity(new android.content.Intent(this, InsulinProfileAddActivity.class));
+    }
+
+    private void showCustomProfileOptions(final Insulin i) {
+        final android.app.AlertDialog.Builder builder = new android.app.AlertDialog.Builder(this);
+        builder.setTitle(i.getDisplayName())
+                .setItems(new CharSequence[]{
+                                getString(com.eveningoutpost.dexdrip.R.string.edit),
+                                getString(com.eveningoutpost.dexdrip.R.string.delete)},
+                        (dialog, which) -> {
+                            if (which == 0) {
+                                final android.content.Intent intent = new android.content.Intent(this, InsulinProfileAddActivity.class);
+                                intent.putExtra(InsulinProfileAddActivity.EXTRA_PROFILE_NAME, i.getName());
+                                startActivity(intent);
+                            } else if (InsulinManager.deleteCustomProfile(i.getName())) {
+                                JoH.static_toast_long(getString(com.eveningoutpost.dexdrip.R.string.insulin_profile_deleted));
+                                // rebuild the whole list view
+                                recreate();
+                            }
+                        })
+                .setNegativeButton(getString(com.eveningoutpost.dexdrip.R.string.cancel), null)
+                .show();
     }
 
     public void profileSaveButton(View myview) {
