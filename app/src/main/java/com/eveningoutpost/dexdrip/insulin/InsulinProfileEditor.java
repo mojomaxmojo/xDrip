@@ -34,6 +34,8 @@ public class InsulinProfileEditor extends BaseAppCompatActivity {
     private Spinner basalSpinner, bolusSpinner;
     private HashMap<Insulin, CheckBox> checkboxes;
     private HashMap<String, Insulin> profiles;
+    private boolean resumedOnce = false;
+    private boolean recreating = false;
 
     //private Context mContext;
 
@@ -139,6 +141,19 @@ public class InsulinProfileEditor extends BaseAppCompatActivity {
         super.onPause();
     }
 
+    @Override
+    protected void onResume() {
+        super.onResume();
+        // when returning from the add/edit form, rebuild the list so it reflects any changes
+        if (resumedOnce && !recreating) {
+            recreating = true; // guard against an recreate()/onResume loop
+            recreate();
+            return;
+        }
+        recreating = false;
+        resumedOnce = true;
+    }
+
     public void profileCancelButton(View myview) {
         InsulinManager.LoadDisabledProfilesFromPrefs();
         finish();
@@ -161,6 +176,8 @@ public class InsulinProfileEditor extends BaseAppCompatActivity {
                                 startActivity(intent);
                             } else if (InsulinManager.deleteCustomProfile(i.getName())) {
                                 JoH.static_toast_long(getString(com.eveningoutpost.dexdrip.R.string.insulin_profile_deleted));
+                                // reload from prefs so basal/bolus pointers cannot reference the deleted profile
+                                InsulinManager.LoadDisabledProfilesFromPrefs();
                                 // rebuild the whole list view
                                 recreate();
                             }

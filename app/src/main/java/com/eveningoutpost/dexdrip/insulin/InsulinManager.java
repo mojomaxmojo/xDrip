@@ -139,7 +139,9 @@ public class InsulinManager {
             concentration = concentration == null || concentration.trim().isEmpty() ? "U100" : concentration.trim();
             if (name.isEmpty())
                 return "Please enter a profile name";
-            if (getProfile(name) != null)
+            // name clash with a predefined (non-custom) profile is not allowed;
+            // saving an existing custom profile with the same name is an update
+            if (getProfile(name) != null && !isCustomProfile(name))
                 return "A profile with this name already exists";
             final long onsetV = Long.parseLong(onset.trim());
             final long durationV = Long.parseLong(duration.trim());
